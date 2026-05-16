@@ -122,6 +122,21 @@ CONFIG = {
 
     # ---- Sound file for the watchdog warning beep ----
     "warning_sound_path": "/System/Library/Sounds/Tink.aiff",
+
+    # ---- Sound test mode: each pad plays a unique macOS system sound ----
+    # Used with --sound-test to verify keys/buttons are detected. No
+    # Accessibility permission, no Wispr, no MIDI — pure detection check.
+    "sound_test_files": {
+        "pad_1": "/System/Library/Sounds/Tink.aiff",
+        "pad_2": "/System/Library/Sounds/Pop.aiff",
+        "pad_3": "/System/Library/Sounds/Ping.aiff",
+        "pad_4": "/System/Library/Sounds/Glass.aiff",
+        "pad_5": "/System/Library/Sounds/Funk.aiff",
+        "pad_6": "/System/Library/Sounds/Hero.aiff",
+        "pad_7": "/System/Library/Sounds/Bottle.aiff",
+        "pad_8": "/System/Library/Sounds/Morse.aiff",
+        "pad_9": "/System/Library/Sounds/Submarine.aiff",
+    },
 }
 
 
@@ -461,12 +476,77 @@ def run_test_mode():
 
 
 # ============================================================================
+# Sound test mode: confirm key detection (no permissions / Wispr / MIDI needed)
+# ============================================================================
+
+def run_sound_test():
+    """Plays a unique sound per pad. No actions, no modes, no permissions.
+    Just confirms that the script detects keys and clicks correctly."""
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.title("Drum Cockpit — Sound Test")
+    root.geometry("560x440")
+    root.attributes("-topmost", True)
+
+    title = tk.Label(root, text="Sound Test", font=("Helvetica", 18, "bold"))
+    title.pack(pady=(15, 5))
+
+    instruct = tk.Label(
+        root,
+        text="Click a pad OR press 1-9 (while this window is focused).\nEach pad plays a different sound.",
+        font=("Helvetica", 11), fg="gray",
+    )
+    instruct.pack()
+
+    last_label = tk.Label(root, text="Waiting…", font=("Helvetica", 13))
+    last_label.pack(pady=10)
+
+    def play_for(pad_name):
+        sound_file = CONFIG["sound_test_files"].get(pad_name)
+        if not sound_file:
+            print(f"  no sound mapped for {pad_name}")
+            return
+        sound_name = sound_file.split("/")[-1].replace(".aiff", "")
+        last_label.config(text=f"✓ {pad_name} → {sound_name}")
+        print(f"[sound-test] {pad_name} → {sound_name}")
+        subprocess.Popen(["afplay", sound_file])  # non-blocking
+
+    btn_frame = tk.Frame(root)
+    btn_frame.pack(pady=10)
+    for i in range(9):
+        n = i + 1
+        pad = f"pad_{n}"
+        sound_file = CONFIG["sound_test_files"].get(pad, "")
+        sound_name = sound_file.split("/")[-1].replace(".aiff", "") if sound_file else "?"
+        btn = tk.Button(
+            btn_frame,
+            text=f"Pad {n}\n[{n}]\n{sound_name}",
+            width=10, height=4,
+            command=lambda p=pad: play_for(p),
+        )
+        btn.grid(row=i // 3, column=i % 3, padx=4, pady=4)
+
+    def on_key(event):
+        pad = CONFIG["test_key_to_pad"].get(event.char)
+        if pad:
+            play_for(pad)
+    root.bind("<Key>", on_key)
+
+    print("Sound test running. Press 1-9 or click buttons. Close window or Ctrl+C to quit.\n")
+    root.mainloop()
+
+
+# ============================================================================
 # Entry point
 # ============================================================================
 
 def main():
     if "--calibrate" in sys.argv:
         run_calibration()
+        return
+    if "--sound-test" in sys.argv:
+        run_sound_test()
         return
     if "--test-keys" in sys.argv or "--test" in sys.argv:
         run_test_mode()
