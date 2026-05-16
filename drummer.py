@@ -26,12 +26,14 @@ import threading
 import subprocess
 
 try:
-    import mido
     from pynput.keyboard import Controller, Key
 except ImportError:
-    print("Missing packages. Install with:")
-    print("  pip3 install mido python-rtmidi pynput")
+    print("pynput not installed. Install with: pip install pynput")
     sys.exit(1)
+
+# mido (MIDI reader) is imported lazily inside the MIDI-using functions.
+# This way --sound-test and --test-keys keep working even if python-rtmidi
+# has install/runtime issues on this machine.
 
 
 # ============================================================================
@@ -337,6 +339,7 @@ def handle_pad_hit(pad_name: str, velocity: int):
 # ============================================================================
 
 def find_midi_input():
+    import mido  # lazy: only loaded when MIDI is actually used
     devices = mido.get_input_names()
     if not devices:
         print("No MIDI input devices found. Is the drum kit plugged in?")
@@ -356,6 +359,7 @@ def find_midi_input():
 
 
 def run_midi_mode():
+    import mido  # lazy: only loaded when MIDI is actually used
     device_name = find_midi_input()
     if not device_name:
         return
@@ -379,6 +383,7 @@ def run_midi_mode():
 # ============================================================================
 
 def run_calibration():
+    import mido  # lazy: only loaded when MIDI is actually used
     device_name = find_midi_input()
     if not device_name:
         return
