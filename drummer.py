@@ -78,10 +78,13 @@ CONFIG = {
 
     # ---- Cross-pad debounce (ms) ----
     # Same pad fired again within this window is treated as a bounce and dropped.
-    # Covers stick bounces AND the coupled pair (GPIO 0+1 → both report PAD 6).
-    # 80ms is enough for stick bounce + coupled pair (~50ms apart) while still
-    # allowing fast rhythm-game play (>12 hits/sec on the same pad).
-    "pad_debounce_ms": 80,
+    # Per-pad: pad_6 is a coupled hardware pair that fires twice with variable
+    # spacing (can lag if serial reader is busy), so it needs a wider window.
+    # Pads 1-4 are used for fast rhythm play, so they get a tight window.
+    "pad_debounce_ms": {
+        "default": 80,    # covers stick bounce, allows fast rhythm play
+        "pad_6": 350,     # coupled pair — wider window so both halves get caught
+    },
 
     # ---- Which pad cycles modes? Must be in active_pads. ----
     "mode_switch_pad": "pad_6",
@@ -515,8 +518,13 @@ def handle_pad_hit(pad_name: str, velocity: int):
     if pad_name in CONFIG.get("ignored_pads", []):
         return
 
-    # Debounce same pad fired again within window (stick bounce + coupled pair)
-    debounce_ms = CONFIG.get("pad_debounce_ms", 100)
+    # Debounce same pad fired again within window (stick bounce + coupled pair).
+    # CONFIG["pad_debounce_ms"] can be an int (uniform) or a dict (per-pad).
+    debounce_cfg = CONFIG.get("pad_debounce_ms", 100)
+    if isinstance(debounce_cfg, dict):
+        debounce_ms = debounce_cfg.get(pad_name, debounce_cfg.get("default", 100))
+    else:
+        debounce_ms = debounce_cfg
     last = state["last_pad_hit_at"].get(pad_name, 0)
     if (now - last) * 1000 < debounce_ms:
         return
