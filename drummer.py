@@ -79,7 +79,7 @@ CONFIG = {
     # ---- Cross-pad debounce (ms) ----
     # Same pad fired again within this window is treated as a bounce and dropped.
     # Covers stick bounces AND the coupled pair (GPIO 0+1 → both report PAD 6).
-    "pad_debounce_ms": 100,
+    "pad_debounce_ms": 300,
 
     # ---- Which pad cycles modes? Must be in active_pads. ----
     "mode_switch_pad": "pad_6",
@@ -89,7 +89,7 @@ CONFIG = {
     # mode_switch_pad (pad_6) is handled separately, not in this dict.
     "actions": {
         "coding": {
-            "pad_4": "wispr_toggle",   # Blue pad: Fn+Space to start, Fn to stop
+            "pad_5": "wispr_toggle",   # physical pad 5 (Tap-Yellow): Fn+Space on, Fn off
         },
         "game": {
             # add bindings here when we wire up game controls
