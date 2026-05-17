@@ -14,7 +14,7 @@ if [ ! -d ".venv" ]; then
     echo "Setting up Python virtual environment (first time, ~30 sec)..."
     python3 -m venv .venv
     .venv/bin/pip install --quiet --upgrade pip
-    .venv/bin/pip install --quiet pynput pyserial
+    .venv/bin/pip install --quiet pynput pyserial pyobjc-framework-Quartz
     # mido/python-rtmidi are optional — only needed if using the kit's MIDI output.
     # They sometimes have install/runtime issues, so we don't fail on them.
     .venv/bin/pip install --quiet mido python-rtmidi 2>/dev/null || \

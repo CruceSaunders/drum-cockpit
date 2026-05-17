@@ -60,8 +60,14 @@ CONFIG = {
     "wispr_watchdog_seconds": 2.0,
     "wispr_warning_seconds": 0.5,
 
-    # ---- Wispr Flow hotkey (must match what's set in Wispr's Settings) ----
-    "wispr_hotkey": [Key.cmd, Key.shift, "9"],
+    # ---- Wispr Flow hotkeys (must match what's set in Wispr's Settings) ----
+    # Cruce's setup:
+    #   Start dictation = Fn + Space
+    #   Stop  dictation = Fn (tap alone)
+    # The action toggles between these two based on state.
+    # Fn requires Quartz (CGEvent), not pynput. See send_fn / send_fn_space below.
+    "wispr_hotkey_start": "fn_space",  # symbolic; handled by action_wispr_toggle
+    "wispr_hotkey_stop":  "fn",
 
     # ---- Modes (mode-switch pad cycles through this list, looping) ----
     "modes": ["coding", "game"],
@@ -74,12 +80,11 @@ CONFIG = {
     "mode_switch_pad": "pad_7",
 
     # ---- Pad → action mapping per mode ----
-    # INTENTIONALLY EMPTY for now — controls get added in a later step.
+    # Action name must exist in ACTION_HANDLERS below.
     # pad_7 (mode switch) is handled separately, not in this dict.
-    # Hitting any other pad will just log "no action mapped" and do nothing.
     "actions": {
         "coding": {
-            # add bindings here when we wire up coding controls
+            "pad_5": "wispr_toggle",   # Blue pad: Fn+Space to start, Fn to stop
         },
         "game": {
             # add bindings here when we wire up game controls
@@ -159,6 +164,57 @@ def play_warning_sound():
     subprocess.run(["afplay", CONFIG["warning_sound_path"]], capture_output=True)
 
 
+# ----- macOS Fn-key support (via Quartz CGEvent) ----------------------------
+# pynput can't reliably send the Fn modifier on macOS — it doesn't set the
+# secondary-Fn flag on the CGEvent it posts. So we build the events directly.
+# Virtual key codes: Fn = 63, Space = 49.
+
+def _send_fn_event(key_down: bool, vk: int = 63):
+    from Quartz import (
+        CGEventCreateKeyboardEvent, CGEventPost, CGEventSetFlags,
+        kCGHIDEventTap, kCGEventFlagMaskSecondaryFn,
+    )
+    event = CGEventCreateKeyboardEvent(None, vk, key_down)
+    if key_down:
+        CGEventSetFlags(event, kCGEventFlagMaskSecondaryFn)
+    CGEventPost(kCGHIDEventTap, event)
+
+
+def send_fn():
+    """Tap the Fn key (down + up)."""
+    _send_fn_event(True)
+    time.sleep(0.02)
+    _send_fn_event(False)
+
+
+def send_fn_space():
+    """Hold Fn, tap Space, release Fn."""
+    from Quartz import (
+        CGEventCreateKeyboardEvent, CGEventPost, CGEventSetFlags,
+        kCGHIDEventTap, kCGEventFlagMaskSecondaryFn,
+    )
+    SPACE_VK = 49
+
+    # Fn down
+    _send_fn_event(True)
+    time.sleep(0.02)
+
+    # Space down (with Fn flag still asserted)
+    e = CGEventCreateKeyboardEvent(None, SPACE_VK, True)
+    CGEventSetFlags(e, kCGEventFlagMaskSecondaryFn)
+    CGEventPost(kCGHIDEventTap, e)
+    time.sleep(0.02)
+
+    # Space up (still with Fn flag)
+    e = CGEventCreateKeyboardEvent(None, SPACE_VK, False)
+    CGEventSetFlags(e, kCGEventFlagMaskSecondaryFn)
+    CGEventPost(kCGHIDEventTap, e)
+    time.sleep(0.02)
+
+    # Fn up
+    _send_fn_event(False)
+
+
 def focus_app(app_name: str):
     """Bring a Mac app to the front. No-op if AppleScript fails."""
     subprocess.run(
@@ -224,12 +280,12 @@ def cycle_mode():
 
 def action_wispr_toggle():
     if state["wispr_active"]:
-        print("[wispr] stopping (manual toggle)")
-        press_combo(CONFIG["wispr_hotkey"])
+        print("[wispr] stopping  (sending Fn)")
+        send_fn()
         state["wispr_active"] = False
     else:
-        print("[wispr] starting")
-        press_combo(CONFIG["wispr_hotkey"])
+        print("[wispr] starting  (sending Fn+Space)")
+        send_fn_space()
         state["wispr_active"] = True
         state["last_hit_time"] = time.time()
         state["warning_played"] = False
@@ -310,7 +366,7 @@ def watchdog_loop():
 
         if elapsed >= timeout:
             print("[wispr] WATCHDOG cutoff — stopped drumming")
-            press_combo(CONFIG["wispr_hotkey"])
+            send_fn()  # Wispr stop hotkey
             state["wispr_active"] = False
             state["warning_played"] = False
 
