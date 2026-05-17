@@ -1,0 +1,183 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #0a0a14;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+.screen {
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.screen.active { display: flex; }
+
+/* ============ Song Select ============ */
+
+#song-select h1 {
+    font-size: 4rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #ff5ea0, #6a5cff, #5cdaff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+#song-select .subtitle {
+    color: #8a8aa0;
+    font-size: 1.2rem;
+    margin-bottom: 2.5rem;
+}
+
+.songs {
+    display: flex;
+    gap: 1.2rem;
+}
+.song-btn {
+    width: 220px;
+    padding: 1.75rem 1.5rem;
+    background: rgba(255,255,255,0.04);
+    border: 2px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    color: #fff;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 100ms ease, border-color 100ms ease, background 100ms ease;
+}
+.song-btn:hover {
+    transform: translateY(-4px);
+    border-color: #6a5cff;
+    background: rgba(106, 92, 255, 0.12);
+}
+.song-name {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+}
+.song-meta {
+    color: #8a8aa0;
+    font-size: 0.95rem;
+}
+
+#song-select .hint {
+    margin-top: 2.5rem;
+    color: #5a5a70;
+    font-size: 0.9rem;
+}
+
+/* ============ Game Screen ============ */
+
+#hud {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 2rem;
+    z-index: 5;
+}
+.hud-cell {
+    text-align: center;
+    min-width: 110px;
+}
+.hud-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: #5a5a70;
+    margin-bottom: 0.2rem;
+}
+#score, #combo, #song-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+#canvas {
+    display: block;
+}
+
+#lane-labels {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    pointer-events: none;
+    z-index: 4;
+}
+.lane-label {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.6);
+    text-align: center;
+    height: 60px;
+    line-height: 60px;
+}
+
+#judgement {
+    position: fixed;
+    left: 50%;
+    bottom: 22%;
+    transform: translateX(-50%);
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms;
+    z-index: 6;
+}
+#judgement.show { opacity: 1; }
+#judgement.perfect { color: #5cdaff; text-shadow: 0 0 24px #5cdaff; }
+#judgement.good    { color: #6a5cff; text-shadow: 0 0 18px #6a5cff; }
+#judgement.miss    { color: #ff5e6a; text-shadow: 0 0 18px #ff5e6a; }
+
+/* ============ Result ============ */
+
+#result-screen h1 {
+    font-size: 3rem;
+    margin-bottom: 2rem;
+}
+.result-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-bottom: 1.5rem;
+    font-size: 1.1rem;
+}
+.result-stats > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 3rem;
+    min-width: 360px;
+}
+.result-label {
+    color: #8a8aa0;
+}
+.quip {
+    margin: 1.5rem 0 2rem;
+    max-width: 500px;
+    text-align: center;
+    color: #5cdaff;
+    font-style: italic;
+    font-size: 1.05rem;
+}
+#play-again {
+    padding: 0.8rem 2rem;
+    background: linear-gradient(135deg, #ff5ea0, #6a5cff);
+    color: #fff;
+    border: 0;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+#play-again:hover { opacity: 0.9; }

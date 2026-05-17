@@ -2,67 +2,70 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Drum Cockpit — Game</title>
-    <style>
-        :root {
-            --bg-base: linear-gradient(135deg, #1a1a2e, #0f3460);
-            --flash: #0f5fcc;
-        }
-        html, body {
-            height: 100%;
-            margin: 0;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-            background: var(--bg-base);
-            color: #fff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            transition: background 80ms ease;
-        }
-        .emoji { font-size: 6rem; margin-bottom: 1rem; }
-        h1 { font-size: 3.5rem; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
-        .subtitle { color: #9aa; margin-top: 0.5rem; font-size: 1.2rem; }
-        .placeholder {
-            margin-top: 2.5rem;
-            padding: 1.5rem 2rem;
-            border: 2px dashed #555;
-            border-radius: 12px;
-            color: #888;
-            max-width: 520px;
-        }
-        .last-input {
-            margin-top: 2rem;
-            font-size: 2rem;
-            color: #4af;
-            min-height: 2.5rem;
-            font-variant-numeric: tabular-nums;
-        }
-    </style>
+    <title>Drum Cockpit — Rhythm Rush</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="emoji">🥁</div>
-    <h1>Drum Cockpit Game</h1>
-    <p class="subtitle">hello world — game placeholder</p>
-    <div class="placeholder">
-        While in Game mode, drum pads send digit keypresses (1, 2, 3, 5, 6) to this window.
-        Hit the mode-switch pad to return to Coding mode.
+    <div id="song-select" class="screen active">
+        <h1>🥁 Rhythm Rush</h1>
+        <p class="subtitle">drum the falling notes in time</p>
+        <div class="songs">
+            <button class="song-btn" data-song="0">
+                <div class="song-name">Stack Trace</div>
+                <div class="song-meta">80 BPM · Easy</div>
+            </button>
+            <button class="song-btn" data-song="1">
+                <div class="song-name">Race Condition</div>
+                <div class="song-meta">120 BPM · Medium</div>
+            </button>
+            <button class="song-btn" data-song="2">
+                <div class="song-name">Heap Overflow</div>
+                <div class="song-meta">160 BPM · Hard</div>
+            </button>
+        </div>
+        <p class="hint">Press a drum 1-5 to hit a falling note. Drum 6 returns to coding.</p>
     </div>
-    <div class="last-input" id="last-input">— waiting for input —</div>
 
-    <script>
-        document.addEventListener('keydown', (e) => {
-            if (e.key >= '1' && e.key <= '9') {
-                document.getElementById('last-input').textContent = `Input: ${e.key}`;
-                document.body.style.background = 'var(--flash)';
-                setTimeout(() => {
-                    document.body.style.background = 'var(--bg-base)';
-                }, 120);
-            }
-        });
-    </script>
+    <div id="game-screen" class="screen">
+        <div id="hud">
+            <div class="hud-cell">
+                <div class="hud-label">SCORE</div>
+                <div id="score">0</div>
+            </div>
+            <div class="hud-cell">
+                <div class="hud-label">COMBO</div>
+                <div id="combo">0x</div>
+            </div>
+            <div class="hud-cell">
+                <div class="hud-label">SONG</div>
+                <div id="song-title">—</div>
+            </div>
+        </div>
+        <canvas id="canvas"></canvas>
+        <div id="lane-labels">
+            <div class="lane-label">1</div>
+            <div class="lane-label">2</div>
+            <div class="lane-label">3</div>
+            <div class="lane-label">4</div>
+            <div class="lane-label">5</div>
+        </div>
+        <div id="judgement"></div>
+    </div>
+
+    <div id="result-screen" class="screen">
+        <h1 id="result-title">Track Complete</h1>
+        <div class="result-stats">
+            <div><span class="result-label">Score</span><span id="result-score">0</span></div>
+            <div><span class="result-label">Accuracy</span><span id="result-accuracy">0%</span></div>
+            <div><span class="result-label">Max Combo</span><span id="result-combo">0x</span></div>
+            <div><span class="result-label">Perfect / Good / Miss</span><span id="result-breakdown">0 / 0 / 0</span></div>
+        </div>
+        <p id="result-quip" class="quip"></p>
+        <button id="play-again">Play again</button>
+    </div>
+
+    <script src="songs.js"></script>
+    <script src="audio.js"></script>
+    <script src="game.js"></script>
 </body>
 </html>
