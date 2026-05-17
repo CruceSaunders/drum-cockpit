@@ -85,6 +85,12 @@ CONFIG = {
         "default": 80,    # covers stick bounce, allows fast rhythm play
     },
 
+    # ---- Mode-switch crosstalk suppression ----
+    # If pad 6 (mode switch) fires within this many ms of any OTHER pad hit,
+    # assume it's vibration cross-talk from hitting another drum hard, and
+    # ignore it. Real intentional mode switches are tapped on their own.
+    "mode_switch_crosstalk_window_ms": 200,
+
     # ---- Which pad cycles modes? Must be in active_pads. ----
     "mode_switch_pad": "pad_6",
 
@@ -164,7 +170,8 @@ state = {
     "wispr_active": False,
     "last_hit_time": 0.0,
     "warning_played": False,
-    "last_pad_hit_at": {},   # pad_name -> last hit time (used for debounce)
+    "last_pad_hit_at": {},        # pad_name -> last hit time (used for debounce)
+    "last_non_mode_hit_at": 0.0,  # last time a non-mode pad fired (crosstalk check)
 }
 
 keyboard = Controller()
@@ -558,8 +565,20 @@ def handle_pad_hit(pad_name: str, velocity: int):
     print(f"[hit] {pad_name} (vel={velocity}) — mode: {current_mode()}")
 
     if pad_name == CONFIG["mode_switch_pad"]:
+        # Crosstalk filter: if any non-mode drum was hit very recently,
+        # this pad-6 event is almost certainly vibration from a real drum
+        # hit (especially during fast game play). Suppress it.
+        ct_window_ms = CONFIG.get("mode_switch_crosstalk_window_ms", 200)
+        elapsed_since_other = (now - state["last_non_mode_hit_at"]) * 1000
+        if elapsed_since_other < ct_window_ms:
+            print(f"  [mode-switch ignored] only {elapsed_since_other:.0f}ms since last other drum (crosstalk)")
+            return
         cycle_mode()
         return
+
+    # This was a non-mode pad — record it so a later pad 6 within the
+    # crosstalk window gets filtered as vibration.
+    state["last_non_mode_hit_at"] = now
 
     action_map = CONFIG["actions"].get(current_mode(), {})
     action_name = action_map.get(pad_name)
