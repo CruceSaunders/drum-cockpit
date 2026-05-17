@@ -91,7 +91,7 @@ CONFIG = {
         "coding": {
             "pad_1": "iterm_smart_split",  # new pane/tab in iTerm, layout-aware
             "pad_2": "iterm_navigate",     # cycle pane→tab→window in iTerm
-            "pad_3": "shift_tab",          # Claude Code auto-accept toggle
+            "pad_3": "close_pane",         # Cmd+W (close current pane/tab)
             "pad_4": "enter",              # submit prompt
             "pad_5": "wispr_toggle",       # Fn+Space on, Fn off
             # pad_6 = mode switch (handled separately)
@@ -349,6 +349,12 @@ def action_shift_tab():
     press_combo([Key.shift, Key.tab])
 
 
+def action_close_pane():
+    """Close current iTerm pane/tab (Cmd+W)."""
+    print("[cmd+w] close pane")
+    press_combo([Key.cmd, "w"])
+
+
 def action_iterm_navigate():
     """Cycle to next pane/tab/window in iTerm2 — whichever level has >1 item."""
     script = '''
@@ -457,6 +463,7 @@ ACTION_HANDLERS = {
     "enter":              action_enter,
     "game_toggle":        action_game_toggle,
     "shift_tab":          action_shift_tab,
+    "close_pane":         action_close_pane,
     "iterm_navigate":     action_iterm_navigate,
     "iterm_smart_split":  action_iterm_smart_split,
     "tmux_new_tab":       action_tmux_new_tab,
