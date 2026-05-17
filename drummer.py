@@ -1,25 +1,25 @@
 """
-drummer.py — Drum-controlled vibe coder cockpit
+drummer.py — Drum-controlled vibe coder cockpit.
 
-Reads MIDI from a drum kit (or keyboard in test mode) and dispatches actions
-based on the current mode. The signature mechanic: while Wispr Flow dictation
-is active, the script watches for drum hits. If no hit within
-`wispr_watchdog_seconds`, it sends Wispr's hotkey again (toggling it off,
-cutting the user off mid-sentence).
+Reads drum pad hits from the ESP32 over USB serial (firmware in
+firmware/drum_reader/). Dispatches actions based on current mode.
+
+  Pad 7 (the coupled pad) cycles modes.
+  Coding mode → iTerm2 focused; pads do AI / shell shortcuts.
+  Game mode   → Chrome focused on game/index.html; pads send digit keystrokes.
 
 Usage:
-    python3 drummer.py                # normal mode (requires drum kit plugged in)
-    python3 drummer.py --calibrate    # identify each pad's MIDI note number
-    python3 drummer.py --test-keys    # open tkinter test panel (no drum needed)
+    python3 drummer.py              # normal serial mode (default)
+    python3 drummer.py --calibrate  # MIDI calibration (legacy)
+    python3 drummer.py --sound-test # tkinter sound test
+    python3 drummer.py --test-keys  # tkinter full action test panel
+    python3 drummer.py --midi       # legacy USB MIDI input mode
 
-Required packages:
-    pip3 install mido python-rtmidi pynput
-
-EVERY tunable variable lives in CONFIG at the top.
-EVERY action is a function registered in ACTION_HANDLERS.
-EVERY mode is just an entry in CONFIG["modes"] + CONFIG["actions"].
+EVERY tunable setting lives in CONFIG. EVERY action is in ACTION_HANDLERS.
+Modes are entries in CONFIG["modes"] (mode-switch pad cycles through them).
 """
 
+import os
 import sys
 import time
 import threading
@@ -28,12 +28,11 @@ import subprocess
 try:
     from pynput.keyboard import Controller, Key
 except ImportError:
-    print("pynput not installed. Install with: pip install pynput")
+    print("pynput not installed. Run: pip install pynput")
     sys.exit(1)
 
-# mido (MIDI reader) is imported lazily inside the MIDI-using functions.
-# This way --sound-test and --test-keys keep working even if python-rtmidi
-# has install/runtime issues on this machine.
+# mido is imported lazily inside the MIDI-using functions so --sound-test and
+# --test-keys keep working even if python-rtmidi has install/runtime issues.
 
 
 # ============================================================================
@@ -47,94 +46,76 @@ except ImportError:
 # Do not assign actions to pad 4 or pad 8.
 # ============================================================================
 
+_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 CONFIG = {
-    # ---- MIDI device selection ----
-    # Substring match (case-insensitive). Leave empty to use first device found.
-    "midi_device_name_contains": "",  # e.g. "KVONE" or "drum"
+    # ---- Serial input (ESP32 over USB) ----
+    "serial_port": "/dev/cu.usbmodem1101",
+    "serial_baud": 115200,
+
+    # ---- Legacy MIDI device (only used with --midi mode) ----
+    "midi_device_name_contains": "",
 
     # ---- Watchdog timing ----
-    "wispr_watchdog_seconds": 2.0,   # cut off Wispr after this long with no hits
-    "wispr_warning_seconds": 0.5,    # beep this long before cutoff (warning)
+    "wispr_watchdog_seconds": 2.0,
+    "wispr_warning_seconds": 0.5,
 
-    # ---- Wispr Flow hotkey ----
-    # MUST match the hotkey configured in Wispr Flow's settings.
-    # Same hotkey starts AND stops Wispr (toggle).
+    # ---- Wispr Flow hotkey (must match what's set in Wispr's Settings) ----
     "wispr_hotkey": [Key.cmd, Key.shift, "9"],
 
-    # ---- Modes (cycled by the mode-switch pad, loops back to start) ----
+    # ---- Modes (mode-switch pad cycles through this list, looping) ----
     "modes": ["coding", "game"],
 
-    # ---- Pad → MIDI note number mapping ----
-    # PLACEHOLDER values. Run --calibrate with the drum kit plugged in,
-    # then update these with the real numbers from your kit.
-    "pad_notes": {
-        "pad_1": 36,
-        "pad_2": 38,
-        "pad_3": 43,
-        "pad_4": 47,
-        "pad_5": 50,
-        "pad_6": 42,
-        "pad_7": 46,
-        "pad_8": 49,
-        "pad_9": 57,
-    },
+    # ---- Hardware pad availability (DO NOT change without re-verifying) ----
+    "active_pads":  ["pad_1", "pad_2", "pad_3", "pad_5", "pad_6", "pad_7"],
+    "ignored_pads": ["pad_4", "pad_8"],  # pad_4 dead, pad_8 coupled w/ pad_7
 
-    # ---- Which pad cycles modes? ----
-    # Same pad in every mode. Hitting it cycles to the next mode in
-    # CONFIG["modes"], looping back to the start.
-    "mode_switch_pad": "pad_9",
+    # ---- Which pad cycles modes? Must be in active_pads. ----
+    "mode_switch_pad": "pad_7",
 
     # ---- Pad → action mapping per mode ----
-    # Each mode maps pad_name → action_name (must exist in ACTION_HANDLERS).
-    # The mode_switch_pad is handled specially — don't list it here.
+    # Action name must exist in ACTION_HANDLERS below.
+    # mode_switch_pad is handled specially; do not list it here.
     "actions": {
         "coding": {
             "pad_1": "wispr_toggle",      # start/stop Wispr dictation
-            "pad_2": "enter",             # send Enter key
-            "pad_3": "game_toggle",       # focus the game window
-            "pad_4": "tmux_new_tab",      # iTerm2: Cmd+T
-            "pad_5": "tmux_next_tab",     # iTerm2: Cmd+]
-            "pad_6": "tmux_prev_tab",     # iTerm2: Cmd+[
-            "pad_7": "cancel",            # Ctrl+C
-            "pad_8": "noop",              # reserved
-            # pad_9 = mode switch
+            "pad_2": "enter",             # send Enter
+            "pad_3": "tmux_new_tab",      # iTerm Cmd+T (new tab)
+            "pad_5": "tmux_next_tab",     # iTerm Cmd+] (next tab)
+            "pad_6": "cancel",            # Ctrl+C
+            # pad_7 = mode switch
         },
         "game": {
             "pad_1": "game_input_1",
             "pad_2": "game_input_2",
             "pad_3": "game_input_3",
-            "pad_4": "game_input_4",
-            "pad_5": "game_input_5",
-            "pad_6": "game_input_6",
-            "pad_7": "game_input_7",
-            "pad_8": "game_input_8",
-            # pad_9 = mode switch
+            "pad_5": "game_input_4",
+            "pad_6": "game_input_5",
+            # pad_7 = mode switch
         },
     },
 
-    # ---- Auto-focus an app when switching to each mode ----
-    # macOS app name (the name that shows in the dock).
-    # Leave a mode out to skip auto-focus for it.
+    # ---- Per-mode focus target (macOS app name) ----
     "mode_focus_app": {
-        "coding": "iTerm",            # or "Terminal" if using built-in
+        "coding": "iTerm",            # change to "Terminal" if using built-in
         "game":   "Google Chrome",
     },
 
-    # ---- Test mode: keyboard digit → pad name ----
-    # Used when running with --test-keys. Lets you simulate drum hits
-    # without the kit plugged in.
+    # ---- Game ----
+    "game_url": f"file://{_PROJECT_DIR}/game/index.html",
+    "game_url_match": "drum-cockpit/game",  # substring used to find existing tab
+
+    # ---- MIDI test-key mapping (legacy --test-keys mode) ----
     "test_key_to_pad": {
         "1": "pad_1", "2": "pad_2", "3": "pad_3",
         "4": "pad_4", "5": "pad_5", "6": "pad_6",
-        "7": "pad_7", "8": "pad_8", "9": "pad_9",
+        "7": "pad_7", "8": "pad_8",
     },
 
     # ---- Sound file for the watchdog warning beep ----
     "warning_sound_path": "/System/Library/Sounds/Tink.aiff",
 
-    # ---- Sound test mode: each pad plays a unique macOS system sound ----
-    # Used with --sound-test to verify keys/buttons are detected. No
-    # Accessibility permission, no Wispr, no MIDI — pure detection check.
+    # ---- Sound test mode files (--sound-test) ----
     "sound_test_files": {
         "pad_1": "/System/Library/Sounds/Tink.aiff",
         "pad_2": "/System/Library/Sounds/Pop.aiff",
@@ -150,7 +131,7 @@ CONFIG = {
 
 
 # ============================================================================
-# State (managed by the script — don't edit directly)
+# State
 # ============================================================================
 
 state = {
@@ -171,28 +152,7 @@ def current_mode() -> str:
     return CONFIG["modes"][state["current_mode_index"]]
 
 
-def note_to_pad(note: int):
-    for pad_name, n in CONFIG["pad_notes"].items():
-        if n == note:
-            return pad_name
-    return None
-
-
-def cycle_mode():
-    state["current_mode_index"] = (state["current_mode_index"] + 1) % len(CONFIG["modes"])
-    new_mode = current_mode()
-    print(f"[mode] now in: {new_mode}")
-    # Auto-focus the app for this mode (if configured)
-    target_app = CONFIG.get("mode_focus_app", {}).get(new_mode)
-    if target_app:
-        subprocess.run(
-            ["osascript", "-e", f'tell application "{target_app}" to activate'],
-            capture_output=True
-        )
-
-
 def press_combo(keys):
-    """Press multiple keys simultaneously, then release in reverse order."""
     for k in keys:
         keyboard.press(k)
     for k in reversed(keys):
@@ -206,6 +166,65 @@ def tap_key(key):
 
 def play_warning_sound():
     subprocess.run(["afplay", CONFIG["warning_sound_path"]], capture_output=True)
+
+
+def focus_app(app_name: str):
+    """Bring a Mac app to the front. No-op if AppleScript fails."""
+    subprocess.run(
+        ["osascript", "-e", f'tell application "{app_name}" to activate'],
+        capture_output=True,
+    )
+
+
+def focus_game_window():
+    """Find Chrome window/tab with our game URL and focus it; if not found,
+    open the game URL in Chrome."""
+    app = CONFIG["mode_focus_app"].get("game", "Google Chrome")
+    match = CONFIG["game_url_match"]
+    url = CONFIG["game_url"]
+
+    script = f'''
+    tell application "{app}"
+        activate
+        set found to false
+        try
+            repeat with w in windows
+                set i to 0
+                repeat with t in tabs of w
+                    set i to i + 1
+                    if URL of t contains "{match}" then
+                        set active tab index of w to i
+                        set index of w to 1
+                        set found to true
+                        exit repeat
+                    end if
+                end repeat
+                if found then exit repeat
+            end repeat
+        end try
+        if not found then
+            open location "{url}"
+        end if
+    end tell
+    '''
+    subprocess.run(["osascript", "-e", script], capture_output=True)
+
+
+def focus_for_mode(mode: str):
+    """Auto-focus the right window when entering a mode."""
+    if mode == "game":
+        focus_game_window()
+    else:
+        app = CONFIG.get("mode_focus_app", {}).get(mode)
+        if app:
+            focus_app(app)
+
+
+def cycle_mode():
+    state["current_mode_index"] = (state["current_mode_index"] + 1) % len(CONFIG["modes"])
+    new_mode = current_mode()
+    print(f"[mode] now in: {new_mode}")
+    focus_for_mode(new_mode)
 
 
 # ============================================================================
@@ -231,13 +250,9 @@ def action_enter():
 
 
 def action_game_toggle():
-    """Focus / open the game window (Chrome)."""
-    print("[game] toggle/focus")
-    target_app = CONFIG.get("mode_focus_app", {}).get("game", "Google Chrome")
-    subprocess.run(
-        ["osascript", "-e", f'tell application "{target_app}" to activate'],
-        capture_output=True
-    )
+    """Show the game window (open if needed) without switching the mode."""
+    print("[game] focus game window")
+    focus_game_window()
 
 
 def action_tmux_new_tab():
@@ -265,12 +280,9 @@ def action_noop():
 
 
 def make_game_input(n: int):
-    """Factory: returns a handler that sends digit key `n` (game input)."""
     def handler():
         print(f"[game] input {n}")
         tap_key(str(n))
-        # TODO: when game uses SSE/WebSocket instead of keystrokes,
-        # replace tap_key with a message-send to the game.
     return handler
 
 
@@ -284,7 +296,6 @@ ACTION_HANDLERS = {
     "cancel":        action_cancel,
     "noop":          action_noop,
 }
-# Auto-register game inputs 1-8
 for i in range(1, 9):
     ACTION_HANDLERS[f"game_input_{i}"] = make_game_input(i)
 
@@ -295,7 +306,7 @@ for i in range(1, 9):
 
 def watchdog_loop():
     while True:
-        time.sleep(0.05)  # 20 Hz check
+        time.sleep(0.05)
         if not state["wispr_active"]:
             continue
         elapsed = time.time() - state["last_hit_time"]
@@ -314,17 +325,20 @@ def watchdog_loop():
 
 
 # ============================================================================
-# Pad hit handler (shared by all input sources: MIDI, test panel, test keyboard)
+# Central pad-hit dispatcher (shared by all input sources)
 # ============================================================================
 
 def handle_pad_hit(pad_name: str, velocity: int):
-    print(f"[hit] {pad_name} (vel={velocity}) — mode: {current_mode()}")
-
-    # Any hit refreshes the watchdog (keeps Wispr alive)
+    # Always refresh watchdog so coupled/ignored pads still count as drumming
     state["last_hit_time"] = time.time()
     state["warning_played"] = False
 
-    # Mode-switch pad always cycles modes, regardless of current mode
+    # Silently drop ignored pads (dead pad_4, coupled-secondary pad_8)
+    if pad_name in CONFIG.get("ignored_pads", []):
+        return
+
+    print(f"[hit] {pad_name} (vel={velocity}) — mode: {current_mode()}")
+
     if pad_name == CONFIG["mode_switch_pad"]:
         cycle_mode()
         return
@@ -342,14 +356,66 @@ def handle_pad_hit(pad_name: str, velocity: int):
 
 
 # ============================================================================
-# Normal mode: read MIDI from drum kit
+# Serial mode — read drum hits from ESP32 (the default)
+# ============================================================================
+
+def run_serial_mode():
+    try:
+        import serial
+    except ImportError:
+        print("pyserial not installed. Run: pip install pyserial")
+        sys.exit(1)
+
+    port = CONFIG["serial_port"]
+    baud = CONFIG["serial_baud"]
+
+    try:
+        ser = serial.Serial(port, baud, timeout=0.2)
+    except Exception as e:
+        print(f"Failed to open {port}: {e}")
+        print("Is the ESP32 plugged in? Is another process holding the port?")
+        return
+
+    threading.Thread(target=watchdog_loop, daemon=True).start()
+
+    print(f"Connected to {port} @ {baud} baud.")
+    print(f"Active pads: {CONFIG['active_pads']}  (ignored: {CONFIG['ignored_pads']})")
+    print(f"Mode-switch pad: {CONFIG['mode_switch_pad']}")
+    print(f"Starting in mode: {current_mode()}.  Hit drum pads. Ctrl+C to quit.\n")
+
+    # Focus the right app for the starting mode
+    focus_for_mode(current_mode())
+
+    while True:
+        try:
+            line = ser.readline().decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
+            if line.startswith("PAD "):
+                try:
+                    n = int(line.split()[1])
+                    handle_pad_hit(f"pad_{n}", 100)
+                except (IndexError, ValueError):
+                    pass
+            else:
+                # boot messages, heartbeats, etc.
+                print(f"[esp32] {line}")
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            print(f"serial error: {e}")
+            break
+
+
+# ============================================================================
+# Legacy MIDI input (only when --midi flag is given)
 # ============================================================================
 
 def find_midi_input():
     import mido  # lazy: only loaded when MIDI is actually used
     devices = mido.get_input_names()
     if not devices:
-        print("No MIDI input devices found. Is the drum kit plugged in?")
+        print("No MIDI input devices found.")
         return None
     name_filter = CONFIG["midi_device_name_contains"].lower().strip()
     if name_filter:
@@ -357,49 +423,35 @@ def find_midi_input():
             if name_filter in d.lower():
                 print(f"Using MIDI device: {d}")
                 return d
-        print(f"No device matching '{name_filter}'. Available:")
-        for d in devices:
-            print(f"  - {d}")
+        print(f"No device matching '{name_filter}'. Available: {devices}")
         return None
     print(f"Using first MIDI device: {devices[0]}")
     return devices[0]
 
 
 def run_midi_mode():
-    import mido  # lazy: only loaded when MIDI is actually used
+    import mido  # lazy
     device_name = find_midi_input()
     if not device_name:
         return
 
     threading.Thread(target=watchdog_loop, daemon=True).start()
-
     print(f"Mode: {current_mode()}. Hit a pad. Ctrl+C to quit.\n")
+
+    # No MIDI-pad mapping table here — would need re-introduction if revived
     with mido.open_input(device_name) as port:
         for msg in port:
-            # Some kits send note_on velocity=0 as note_off
             if msg.type == "note_on" and msg.velocity > 0:
-                pad = note_to_pad(msg.note)
-                if pad is None:
-                    print(f"[unknown note: {msg.note}] (consider adding to pad_notes)")
-                    continue
-                handle_pad_hit(pad, msg.velocity)
+                print(f"[midi] note {msg.note} vel {msg.velocity} (mapping not implemented in serial-first build)")
 
-
-# ============================================================================
-# Calibration mode: identify which pad sends which MIDI note number
-# ============================================================================
 
 def run_calibration():
-    import mido  # lazy: only loaded when MIDI is actually used
+    import mido  # lazy
     device_name = find_midi_input()
     if not device_name:
         return
-    print("\n=== CALIBRATION MODE ===")
-    print("Hit each pad. The MIDI note number prints below.")
-    print("Write down: physical pad → note number.")
-    print("Then update CONFIG['pad_notes'] in drummer.py.")
-    print("Ctrl+C when done.\n")
-
+    print("\n=== MIDI CALIBRATION (legacy) ===")
+    print("Hit each pad. The MIDI note number prints below. Ctrl+C when done.\n")
     seen = {}
     with mido.open_input(device_name) as port:
         for msg in port:
@@ -412,12 +464,59 @@ def run_calibration():
 
 
 # ============================================================================
-# Test mode: tkinter panel that simulates pad hits (no drum required)
+# Sound test (no permissions / hardware needed)
+# ============================================================================
+
+def run_sound_test():
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.title("Drum Cockpit — Sound Test")
+    root.geometry("560x440")
+    root.attributes("-topmost", True)
+
+    tk.Label(root, text="Sound Test", font=("Helvetica", 18, "bold")).pack(pady=(15, 5))
+    tk.Label(root,
+             text="Click a pad OR press 1-9 (while focused). Each pad plays a different sound.",
+             font=("Helvetica", 11), fg="gray").pack()
+    last = tk.Label(root, text="Waiting…", font=("Helvetica", 13))
+    last.pack(pady=10)
+
+    def play_for(pad_name):
+        sound_file = CONFIG["sound_test_files"].get(pad_name)
+        if not sound_file:
+            return
+        sound_name = sound_file.split("/")[-1].replace(".aiff", "")
+        last.config(text=f"✓ {pad_name} → {sound_name}")
+        print(f"[sound-test] {pad_name} → {sound_name}")
+        subprocess.Popen(["afplay", sound_file])
+
+    btn_frame = tk.Frame(root)
+    btn_frame.pack(pady=10)
+    for i in range(9):
+        n = i + 1
+        pad = f"pad_{n}"
+        sf = CONFIG["sound_test_files"].get(pad, "")
+        sn = sf.split("/")[-1].replace(".aiff", "") if sf else "?"
+        tk.Button(btn_frame, text=f"Pad {n}\n[{n}]\n{sn}", width=10, height=4,
+                  command=lambda p=pad: play_for(p)).grid(row=i // 3, column=i % 3, padx=4, pady=4)
+
+    def on_key(event):
+        pad = CONFIG["test_key_to_pad"].get(event.char)
+        if pad:
+            play_for(pad)
+    root.bind("<Key>", on_key)
+
+    print("Sound test running. Close window or Ctrl+C to quit.\n")
+    root.mainloop()
+
+
+# ============================================================================
+# Full action test panel (--test-keys)
 # ============================================================================
 
 def run_test_mode():
-    """Opens a tkinter window with 9 pad buttons + keyboard 1-9 bindings.
-    Lets you exercise the full action pipeline without a drum kit."""
+    """Tkinter panel that simulates pad hits via mouse click or keys 1-9."""
     import tkinter as tk
 
     threading.Thread(target=watchdog_loop, daemon=True).start()
@@ -429,18 +528,10 @@ def run_test_mode():
 
     mode_label = tk.Label(root, text="", font=("Helvetica", 20, "bold"))
     mode_label.pack(pady=(15, 5))
-
-    instruct = tk.Label(
-        root,
-        text="Click a pad button OR press 1-9 (while this window is focused).",
-        font=("Helvetica", 11),
-        fg="gray",
-    )
-    instruct.pack()
-
+    tk.Label(root, text="Click a pad button OR press 1-9 (while focused).",
+             font=("Helvetica", 11), fg="gray").pack()
     wispr_label = tk.Label(root, text="", font=("Helvetica", 12))
     wispr_label.pack(pady=(8, 0))
-
     timer_label = tk.Label(root, text="", font=("Helvetica", 10), fg="gray")
     timer_label.pack(pady=(0, 8))
 
@@ -466,16 +557,17 @@ def run_test_mode():
         n = i + 1
         pad = f"pad_{n}"
         is_mode = (pad == CONFIG["mode_switch_pad"])
+        is_dead = pad in CONFIG.get("ignored_pads", [])
         label = f"Pad {n}\n[{n}]"
         if is_mode:
             label += "\n(MODE)"
-        bg = "#ffd966" if is_mode else None
-        btn = tk.Button(
-            btn_frame, text=label, width=10, height=4,
-            command=lambda p=pad: fire(p),
-            bg=bg, activebackground=bg,
-        )
-        btn.grid(row=i // 3, column=i % 3, padx=4, pady=4)
+        if is_dead:
+            label += "\n(IGNORED)"
+        bg = "#ffd966" if is_mode else ("#666" if is_dead else None)
+        tk.Button(btn_frame, text=label, width=10, height=4,
+                  command=lambda p=pad: fire(p),
+                  bg=bg, activebackground=bg
+                  ).grid(row=i // 3, column=i % 3, padx=4, pady=4)
 
     def on_key(event):
         pad = CONFIG["test_key_to_pad"].get(event.char)
@@ -484,68 +576,6 @@ def run_test_mode():
     root.bind("<Key>", on_key)
 
     print("Test panel running. Close window or Ctrl+C to quit.\n")
-    root.mainloop()
-
-
-# ============================================================================
-# Sound test mode: confirm key detection (no permissions / Wispr / MIDI needed)
-# ============================================================================
-
-def run_sound_test():
-    """Plays a unique sound per pad. No actions, no modes, no permissions.
-    Just confirms that the script detects keys and clicks correctly."""
-    import tkinter as tk
-
-    root = tk.Tk()
-    root.title("Drum Cockpit — Sound Test")
-    root.geometry("560x440")
-    root.attributes("-topmost", True)
-
-    title = tk.Label(root, text="Sound Test", font=("Helvetica", 18, "bold"))
-    title.pack(pady=(15, 5))
-
-    instruct = tk.Label(
-        root,
-        text="Click a pad OR press 1-9 (while this window is focused).\nEach pad plays a different sound.",
-        font=("Helvetica", 11), fg="gray",
-    )
-    instruct.pack()
-
-    last_label = tk.Label(root, text="Waiting…", font=("Helvetica", 13))
-    last_label.pack(pady=10)
-
-    def play_for(pad_name):
-        sound_file = CONFIG["sound_test_files"].get(pad_name)
-        if not sound_file:
-            print(f"  no sound mapped for {pad_name}")
-            return
-        sound_name = sound_file.split("/")[-1].replace(".aiff", "")
-        last_label.config(text=f"✓ {pad_name} → {sound_name}")
-        print(f"[sound-test] {pad_name} → {sound_name}")
-        subprocess.Popen(["afplay", sound_file])  # non-blocking
-
-    btn_frame = tk.Frame(root)
-    btn_frame.pack(pady=10)
-    for i in range(9):
-        n = i + 1
-        pad = f"pad_{n}"
-        sound_file = CONFIG["sound_test_files"].get(pad, "")
-        sound_name = sound_file.split("/")[-1].replace(".aiff", "") if sound_file else "?"
-        btn = tk.Button(
-            btn_frame,
-            text=f"Pad {n}\n[{n}]\n{sound_name}",
-            width=10, height=4,
-            command=lambda p=pad: play_for(p),
-        )
-        btn.grid(row=i // 3, column=i % 3, padx=4, pady=4)
-
-    def on_key(event):
-        pad = CONFIG["test_key_to_pad"].get(event.char)
-        if pad:
-            play_for(pad)
-    root.bind("<Key>", on_key)
-
-    print("Sound test running. Press 1-9 or click buttons. Close window or Ctrl+C to quit.\n")
     root.mainloop()
 
 
@@ -563,7 +593,11 @@ def main():
     if "--test-keys" in sys.argv or "--test" in sys.argv:
         run_test_mode()
         return
-    run_midi_mode()
+    if "--midi" in sys.argv:
+        run_midi_mode()
+        return
+    # Default: serial input from ESP32
+    run_serial_mode()
 
 
 if __name__ == "__main__":

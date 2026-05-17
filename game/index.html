@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Drum Cockpit — Game</title>
+    <style>
+        :root {
+            --bg-base: linear-gradient(135deg, #1a1a2e, #0f3460);
+            --flash: #0f5fcc;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+            background: var(--bg-base);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            transition: background 80ms ease;
+        }
+        .emoji { font-size: 6rem; margin-bottom: 1rem; }
+        h1 { font-size: 3.5rem; margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+        .subtitle { color: #9aa; margin-top: 0.5rem; font-size: 1.2rem; }
+        .placeholder {
+            margin-top: 2.5rem;
+            padding: 1.5rem 2rem;
+            border: 2px dashed #555;
+            border-radius: 12px;
+            color: #888;
+            max-width: 520px;
+        }
+        .last-input {
+            margin-top: 2rem;
+            font-size: 2rem;
+            color: #4af;
+            min-height: 2.5rem;
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+</head>
+<body>
+    <div class="emoji">🥁</div>
+    <h1>Drum Cockpit Game</h1>
+    <p class="subtitle">hello world — game placeholder</p>
+    <div class="placeholder">
+        While in Game mode, drum pads send digit keypresses (1, 2, 3, 5, 6) to this window.
+        Hit the mode-switch pad to return to Coding mode.
+    </div>
+    <div class="last-input" id="last-input">— waiting for input —</div>
+
+    <script>
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '1' && e.key <= '9') {
+                document.getElementById('last-input').textContent = `Input: ${e.key}`;
+                document.body.style.background = 'var(--flash)';
+                setTimeout(() => {
+                    document.body.style.background = 'var(--bg-base)';
+                }, 120);
+            }
+        });
+    </script>
+</body>
+</html>
