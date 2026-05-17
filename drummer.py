@@ -101,7 +101,12 @@ CONFIG = {
             # pad_6 = mode switch (handled separately)
         },
         "game": {
-            # add bindings here when we wire up game controls
+            "pad_1": "game_input_1",   # sends key "1" → lane 1
+            "pad_2": "game_input_2",   # sends key "2" → lane 2
+            "pad_3": "game_input_3",   # sends key "3" → lane 3
+            "pad_4": "game_input_4",   # sends key "4" → lane 4
+            "pad_5": "game_input_5",   # sends key "5" → menu nav OR lane 5
+            # pad_6 = mode switch (handled separately)
         },
     },
 
