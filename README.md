@@ -66,6 +66,10 @@ All settings live in `CONFIG` at the top of `drummer.py`:
 | Terminal | iTerm2 + Claude Code CLI |
 | Voice | Wispr Flow |
 
+## Hardware state
+
+The authoritative pad mapping (which pads work, which are dead, which are coupled) lives in **[HARDWARE.md](HARDWARE.md)**. Any code that assigns actions to pads must respect that file. Updated whenever the wiring changes.
+
 ## Status
 
 Built during the Stasis Hardware Hackathon 2026. Working code, evolving daily. Project docs and ideation live in a separate Obsidian vault.

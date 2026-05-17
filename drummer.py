@@ -38,6 +38,13 @@ except ImportError:
 
 # ============================================================================
 # CONFIG — every tunable setting lives here
+#
+# ⚠️ HARDWARE CONSTRAINTS — see HARDWARE.md for the authoritative pad map.
+#   Active pads (only these): 1, 2, 3, 5, 6, 7
+#   DEAD pad (never fires):   4
+#   COUPLED pair (treat as 1): 7 + 8  (fire together; assign actions to 7 only,
+#                                       leave 8 unmapped so it's silently ignored)
+# Do not assign actions to pad 4 or pad 8.
 # ============================================================================
 
 CONFIG = {

@@ -31,17 +31,32 @@ unsigned long ledOnUntil = 0;
 bool ledOn = false;
 
 void setup() {
-  Serial.begin(115200);
-  delay(200);
-  Serial.println("drum_reader ready");
-
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH); // off
+
+  // Boot signal: blink onboard LED 3 times so we can SEE the firmware started.
+  for (int b = 0; b < 3; b++) {
+    digitalWrite(LED_PIN, LOW);   // on
+    delay(150);
+    digitalWrite(LED_PIN, HIGH);  // off
+    delay(150);
+  }
+
+  Serial.begin(115200);
+  delay(500);  // let USB CDC enumerate
+  Serial.println("drum_reader ready");
 
   for (int i = 0; i < PAD_COUNT; i++) {
     pinMode(PAD_PINS[i], INPUT_PULLUP);
     lastState[i] = HIGH;
     lastChange[i] = 0;
+  }
+
+  // After init, also print every second for the first 10 seconds so we can
+  // tell whether serial is reaching the laptop even when no pads are hit.
+  for (int s = 0; s < 5; s++) {
+    Serial.print("heartbeat ");
+    Serial.println(s);
+    delay(1000);
   }
 }
 
