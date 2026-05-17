@@ -89,12 +89,27 @@ CONFIG = {
     # mode_switch_pad (pad_6) is handled separately, not in this dict.
     "actions": {
         "coding": {
-            "pad_5": "wispr_toggle",   # physical pad 5 (Tap-Yellow): Fn+Space on, Fn off
+            "pad_1": "iterm_smart_split",  # new pane/tab in iTerm, layout-aware
+            "pad_2": "iterm_navigate",     # cycle pane→tab→window in iTerm
+            "pad_3": "shift_tab",          # Claude Code auto-accept toggle
+            "pad_4": "enter",              # submit prompt
+            "pad_5": "wispr_toggle",       # Fn+Space on, Fn off
+            # pad_6 = mode switch (handled separately)
         },
         "game": {
             # add bindings here when we wire up game controls
         },
     },
+
+    # ---- Smart-split threshold ----
+    # If `columns > rows * SPLIT_ASPECT_FACTOR`, the pane is "wider than tall in
+    # pixels" (cells are ~2x taller than wide), so we split vertically. Tune up
+    # to bias toward horizontal splits, down to bias toward vertical.
+    "iterm_split_aspect_factor": 2.0,
+
+    # ---- Smart-split limit ----
+    # If current tab already has this many sessions, open a new tab instead of splitting.
+    "iterm_max_sessions_per_tab": 4,
 
     # ---- Per-mode focus target (macOS app name) ----
     "mode_focus_app": {
@@ -328,6 +343,104 @@ def action_cancel():
     press_combo([Key.ctrl, "c"])
 
 
+def action_shift_tab():
+    """Claude Code: toggle auto-accept mode."""
+    print("[shift+tab]")
+    press_combo([Key.shift, Key.tab])
+
+
+def action_iterm_navigate():
+    """Cycle to next pane/tab/window in iTerm2 — whichever level has >1 item."""
+    script = '''
+    tell application "iTerm2"
+        try
+            set paneCount to count of (every session of current tab of current window)
+        on error
+            set paneCount to 0
+        end try
+        try
+            set tabCount to count of (every tab of current window)
+        on error
+            set tabCount to 0
+        end try
+        try
+            set winCount to count of (every window)
+        on error
+            set winCount to 0
+        end try
+    end tell
+    if paneCount > 1 then
+        return "pane"
+    else if tabCount > 1 then
+        return "tab"
+    else if winCount > 1 then
+        return "window"
+    else
+        return "none"
+    end if
+    '''
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=2,
+        )
+        decision = result.stdout.strip()
+    except Exception as e:
+        print(f"[iterm-nav] AppleScript failed: {e}")
+        decision = "pane"  # safe default
+
+    print(f"[iterm-nav] cycling: {decision}")
+    if decision == "pane":
+        press_combo([Key.cmd, "]"])
+    elif decision == "tab":
+        press_combo([Key.cmd, Key.shift, "]"])
+    elif decision == "window":
+        press_combo([Key.cmd, "`"])
+    # "none" → do nothing
+
+
+def action_iterm_smart_split():
+    """Open a new pane (smart direction) or new tab if pane count >= limit."""
+    script = '''
+    tell application "iTerm2"
+        try
+            set paneCount to count of (every session of current tab of current window)
+            set c to columns of current session of current window
+            set r to rows of current session of current window
+        on error
+            return "fallback,0,0"
+        end try
+    end tell
+    return (paneCount as string) & "," & (c as string) & "," & (r as string)
+    '''
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=2,
+        )
+        parts = result.stdout.strip().split(",")
+        pane_count = int(parts[0]) if parts[0].isdigit() else 1
+        cols = int(parts[1]) if parts[1].isdigit() else 0
+        rows = int(parts[2]) if parts[2].isdigit() else 0
+    except Exception as e:
+        print(f"[iterm-split] AppleScript failed: {e} — defaulting to Cmd+D")
+        press_combo([Key.cmd, "d"])
+        return
+
+    max_per_tab = CONFIG.get("iterm_max_sessions_per_tab", 4)
+    aspect = CONFIG.get("iterm_split_aspect_factor", 2.0)
+
+    if pane_count >= max_per_tab:
+        print(f"[iterm-split] {pane_count} panes already — opening new tab")
+        press_combo([Key.cmd, "t"])
+    elif rows > 0 and cols > rows * aspect:
+        print(f"[iterm-split] {cols}x{rows} → wider than tall → split vertical")
+        press_combo([Key.cmd, "d"])
+    else:
+        print(f"[iterm-split] {cols}x{rows} → taller than wide → split horizontal")
+        press_combo([Key.cmd, Key.shift, "d"])
+
+
 def action_noop():
     pass
 
@@ -340,14 +453,17 @@ def make_game_input(n: int):
 
 
 ACTION_HANDLERS = {
-    "wispr_toggle":  action_wispr_toggle,
-    "enter":         action_enter,
-    "game_toggle":   action_game_toggle,
-    "tmux_new_tab":  action_tmux_new_tab,
-    "tmux_next_tab": action_tmux_next_tab,
-    "tmux_prev_tab": action_tmux_prev_tab,
-    "cancel":        action_cancel,
-    "noop":          action_noop,
+    "wispr_toggle":       action_wispr_toggle,
+    "enter":              action_enter,
+    "game_toggle":        action_game_toggle,
+    "shift_tab":          action_shift_tab,
+    "iterm_navigate":     action_iterm_navigate,
+    "iterm_smart_split":  action_iterm_smart_split,
+    "tmux_new_tab":       action_tmux_new_tab,
+    "tmux_next_tab":      action_tmux_next_tab,
+    "tmux_prev_tab":      action_tmux_prev_tab,
+    "cancel":             action_cancel,
+    "noop":               action_noop,
 }
 for i in range(1, 9):
     ACTION_HANDLERS[f"game_input_{i}"] = make_game_input(i)
