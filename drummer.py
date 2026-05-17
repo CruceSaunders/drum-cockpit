@@ -300,10 +300,12 @@ def cycle_mode():
 # ============================================================================
 
 def action_wispr_toggle():
+    """Pad 5 = Wispr START. When already active, just keep alive (no stop).
+    To stop Wispr, simply stop drumming — the watchdog will cut it off."""
     if state["wispr_active"]:
-        print("[wispr] stopping  (sending Fn)")
-        send_fn()
-        state["wispr_active"] = False
+        # Already running — pad 5 hit just refreshes watchdog (handled by handle_pad_hit).
+        # Don't send Fn here (that would stop Wispr unexpectedly).
+        print("[wispr] still on (drum-keep-alive)")
     else:
         print("[wispr] starting  (sending Fn+Space)")
         send_fn_space()
