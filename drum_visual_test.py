@@ -31,19 +31,19 @@ except ImportError:
 
 SERIAL_PORT = "/dev/cu.usbmodem1101"
 BAUD = 115200
-PAD_COUNT = 8
+PAD_COUNT = 6   # physical pads (1..6)
 FLASH_MS = 200
 
-# Per-pad wiring info (matches firmware/drum_reader/drum_reader.ino)
+# Per-pad wiring info (physical-pad numbering — matches firmware PAD_NUMBERS)
 PAD_INFO = {
-    1: {"color": "Grey",       "gpio": 5, "bb": "c1"},
-    2: {"color": "Red",        "gpio": 6, "bb": "c2"},
-    3: {"color": "Purple",     "gpio": 7, "bb": "c3"},
-    4: {"color": "Green",      "gpio": 4, "bb": "h4"},
-    5: {"color": "Blue",       "gpio": 3, "bb": "h5"},
-    6: {"color": "Tap-Yellow", "gpio": 2, "bb": "h6"},
-    7: {"color": "Brown",      "gpio": 1, "bb": "h7"},
-    8: {"color": "White",      "gpio": 0, "bb": "h8"},
+    1: {"color": "Grey",         "gpio": 5,   "bb": "c1"},
+    2: {"color": "Purple",       "gpio": 7,   "bb": "c3"},
+    3: {"color": "Red",          "gpio": 6,   "bb": "c2"},
+    4: {"color": "Blue",         "gpio": 3,   "bb": "h5"},
+    5: {"color": "Tap-Yellow",   "gpio": 2,   "bb": "h6"},
+    6: {"color": "Brown+White",  "gpio": "1+0", "bb": "h7+h8"},
+    7: {"color": "—",            "gpio": "—", "bb": "—"},   # unused now
+    8: {"color": "—",            "gpio": "—", "bb": "—"},   # unused now
 }
 
 # Distinct color per pad (1-indexed -> PAD_FLASH_COLORS[n-1])

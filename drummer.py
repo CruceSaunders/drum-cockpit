@@ -39,11 +39,11 @@ except ImportError:
 # CONFIG — every tunable setting lives here
 #
 # ⚠️ HARDWARE CONSTRAINTS — see HARDWARE.md for the authoritative pad map.
-#   Active pads (only these): 1, 2, 3, 5, 6, 7
-#   DEAD pad (never fires):   4
-#   COUPLED pair (treat as 1): 7 + 8  (fire together; assign actions to 7 only,
-#                                       leave 8 unmapped so it's silently ignored)
-# Do not assign actions to pad 4 or pad 8.
+# Pad numbers below match the PHYSICAL drum layout (1–6).
+#   Active pads:  1, 2, 3, 4, 5, 6
+#   Pad 6 is a coupled hardware pair — both halves report as PAD 6 (Python
+#   debounces the duplicate event).
+#   Firmware also emits "PAD 99" for the dead GPIO 4 if it ever fires (ignored).
 # ============================================================================
 
 _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -73,18 +73,23 @@ CONFIG = {
     "modes": ["coding", "game"],
 
     # ---- Hardware pad availability (DO NOT change without re-verifying) ----
-    "active_pads":  ["pad_1", "pad_2", "pad_3", "pad_5", "pad_6", "pad_7"],
-    "ignored_pads": ["pad_4", "pad_8"],  # pad_4 dead, pad_8 coupled w/ pad_7
+    "active_pads":  ["pad_1", "pad_2", "pad_3", "pad_4", "pad_5", "pad_6"],
+    "ignored_pads": ["pad_99"],  # GPIO 4 (dead drum) emits this if it ever fires
+
+    # ---- Cross-pad debounce (ms) ----
+    # Same pad fired again within this window is treated as a bounce and dropped.
+    # Covers stick bounces AND the coupled pair (GPIO 0+1 → both report PAD 6).
+    "pad_debounce_ms": 100,
 
     # ---- Which pad cycles modes? Must be in active_pads. ----
-    "mode_switch_pad": "pad_7",
+    "mode_switch_pad": "pad_6",
 
     # ---- Pad → action mapping per mode ----
     # Action name must exist in ACTION_HANDLERS below.
-    # pad_7 (mode switch) is handled separately, not in this dict.
+    # mode_switch_pad (pad_6) is handled separately, not in this dict.
     "actions": {
         "coding": {
-            "pad_5": "wispr_toggle",   # Blue pad: Fn+Space to start, Fn to stop
+            "pad_4": "wispr_toggle",   # Blue pad: Fn+Space to start, Fn to stop
         },
         "game": {
             # add bindings here when we wire up game controls
@@ -135,6 +140,7 @@ state = {
     "wispr_active": False,
     "last_hit_time": 0.0,
     "warning_played": False,
+    "last_pad_hit_at": {},   # pad_name -> last hit time (used for debounce)
 }
 
 keyboard = Controller()
@@ -376,13 +382,22 @@ def watchdog_loop():
 # ============================================================================
 
 def handle_pad_hit(pad_name: str, velocity: int):
-    # Always refresh watchdog so coupled/ignored pads still count as drumming
-    state["last_hit_time"] = time.time()
-    state["warning_played"] = False
+    now = time.time()
 
-    # Silently drop ignored pads (dead pad_4, coupled-secondary pad_8)
+    # Silently drop ignored pads (e.g. dead GPIO printing PAD 99)
     if pad_name in CONFIG.get("ignored_pads", []):
         return
+
+    # Debounce same pad fired again within window (stick bounce + coupled pair)
+    debounce_ms = CONFIG.get("pad_debounce_ms", 100)
+    last = state["last_pad_hit_at"].get(pad_name, 0)
+    if (now - last) * 1000 < debounce_ms:
+        return
+    state["last_pad_hit_at"][pad_name] = now
+
+    # Refresh Wispr watchdog (any hit counts as drumming)
+    state["last_hit_time"] = now
+    state["warning_played"] = False
 
     print(f"[hit] {pad_name} (vel={velocity}) — mode: {current_mode()}")
 

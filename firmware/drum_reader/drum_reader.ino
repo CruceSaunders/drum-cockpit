@@ -1,24 +1,30 @@
-// drum_reader.ino — read 8 drum pads, print events over USB serial
+// drum_reader.ino — read drum pads, print events over USB serial.
 //
 // Each pad is wired as a switch: one wire to a GPIO, common GND.
 // When a pad is hit, the switch closes -> GPIO goes LOW.
 //
-// Wiring (GPIO -> pad number):
-//   GPIO 5 = pad 1 (grey)       breadboard c1
-//   GPIO 6 = pad 2 (red)        breadboard c2
-//   GPIO 7 = pad 3 (purple)     breadboard c3
-//   GPIO 4 = pad 4 (green)      breadboard h4
-//   GPIO 3 = pad 5 (blue)       breadboard h5
-//   GPIO 2 = pad 6 (tap-yellow) breadboard h6
-//   GPIO 1 = pad 7 (brown)      breadboard h7
-//   GPIO 0 = pad 8 (white)      breadboard h8
-//   GND    = black              breadboard g2
+// PAD_NUMBERS uses the PHYSICAL drum layout (1-6, with 4 dead).
+// See HARDWARE.md for the authoritative map.
+//
+// Wiring (GPIO -> physical pad #):
+//   GPIO 5 = physical pad 1   wire Grey         breadboard c1
+//   GPIO 7 = physical pad 2   wire Purple       breadboard c3
+//   GPIO 6 = physical pad 3   wire Red          breadboard c2
+//   GPIO 4 = (unmapped, dead) wire Green        breadboard h4  -> prints "PAD 99"
+//   GPIO 3 = physical pad 4   wire Blue         breadboard h5
+//   GPIO 2 = physical pad 5   wire Tap-Yellow   breadboard h6
+//   GPIO 1 = physical pad 6   wire Brown        breadboard h7
+//   GPIO 0 = physical pad 6   wire White        breadboard h8  (coupled w/ GPIO 1)
+//   GND    = black                              breadboard g2
+//
+// The coupled pair (GPIO 1 + 0) both print PAD 6; the Python side debounces
+// the duplicate event so taps register only once.
 //
 // Onboard LED (GPIO 8) flashes briefly on every hit for visual feedback.
 
 const int PAD_COUNT = 8;
-const int PAD_PINS[PAD_COUNT]    = { 5, 6, 7, 4, 3, 2, 1, 0 };
-const int PAD_NUMBERS[PAD_COUNT] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+const int PAD_PINS[PAD_COUNT]    = {  5,  6,  7,  4,  3,  2,  1,  0 };
+const int PAD_NUMBERS[PAD_COUNT] = {  1,  3,  2, 99,  4,  5,  6,  6 };
 
 const unsigned long DEBOUNCE_MS = 30;
 const unsigned long LED_FLASH_MS = 30;
