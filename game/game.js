@@ -22,10 +22,13 @@
 const TRAVEL_TIME    = 1.5;   // seconds for a note to fall top -> bottom
 const LANE_COUNT     = 5;
 const LANE_WIDTH     = 110;   // must match .lane-label width in style.css
-const HIT_ZONE_HEIGHT = 80;
-const HIT_WINDOW_GOOD    = 0.12;  // ± seconds, "good"
-const HIT_WINDOW_PERFECT = 0.06;  // ± seconds, "perfect"
-const MISS_WINDOW        = 0.15;  // seconds late after which the note auto-misses
+const HIT_ZONE_HEIGHT = 120;
+const HIT_WINDOW_PERFECT = 0.10;  // ± seconds, "perfect"
+const HIT_WINDOW_GOOD    = 0.22;  // ± seconds, "good"  (more lenient than before)
+const MISS_WINDOW        = 0.30;  // seconds late after which the note auto-misses
+const STRAY_WINDOW       = 0.40;  // beyond this from any note, drumming = stray (no penalty)
+const NOTE_WIDTH         = 64;    // px — rectangle, narrower than lane
+const NOTE_HEIGHT        = 90;    // px — vertical (tall) to make hit window visible
 const DOUBLE_TAP_WINDOW  = 400;   // ms — double-tap drum 5 to select song
 
 const QUIPS = {
@@ -206,7 +209,9 @@ function render() {
     ctx.fillStyle = grad;
     ctx.fillRect(groupX, hitZoneY, groupW, HIT_ZONE_HEIGHT);
 
-    // Notes
+    // Notes — drawn as tall rounded rectangles so the visual hit window is
+    // bigger than a circle was. The note's CENTER reaches hitZoneY at the
+    // perfect-hit moment.
     for (const n of notes) {
         if (n.judged && n.hit) continue;
         const dtToHit = n.hitTime - t;
@@ -217,24 +222,35 @@ function render() {
         const y = progress * hitZoneY;
         const cx = laneX(n.lane);
 
-        const noteR = 36;
+        const nx = cx - NOTE_WIDTH / 2;
+        const ny = y - NOTE_HEIGHT / 2;
 
         // Glow
         ctx.fillStyle = `rgba(106, 92, 255, ${Math.min(0.45, progress * 0.5)})`;
-        ctx.beginPath();
-        ctx.arc(cx, y, noteR + 10, 0, Math.PI * 2);
-        ctx.fill();
+        if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(nx - 8, ny - 8, NOTE_WIDTH + 16, NOTE_HEIGHT + 16, 18);
+            ctx.fill();
+        } else {
+            ctx.fillRect(nx - 8, ny - 8, NOTE_WIDTH + 16, NOTE_HEIGHT + 16);
+        }
 
-        const noteGrad = ctx.createLinearGradient(cx - noteR, y, cx + noteR, y);
+        // Core gradient (cyan → purple, left → right)
+        const noteGrad = ctx.createLinearGradient(nx, y, nx + NOTE_WIDTH, y);
         noteGrad.addColorStop(0, "#5cdaff");
         noteGrad.addColorStop(1, "#6a5cff");
         ctx.fillStyle = noteGrad;
-        ctx.beginPath();
-        ctx.arc(cx, y, noteR, 0, Math.PI * 2);
-        ctx.fill();
+        if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(nx, ny, NOTE_WIDTH, NOTE_HEIGHT, 12);
+            ctx.fill();
+        } else {
+            ctx.fillRect(nx, ny, NOTE_WIDTH, NOTE_HEIGHT);
+        }
 
+        // Lane number on note
         ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.font = "bold 20px -apple-system, sans-serif";
+        ctx.font = "bold 24px -apple-system, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(n.lane, cx, y);
@@ -248,6 +264,7 @@ function handleHit(lane) {
 
     const t = audio.now();
 
+    // Find closest unjudged note in this lane
     let best = null;
     let bestDt = Infinity;
     for (const n of notes) {
@@ -257,21 +274,27 @@ function handleHit(lane) {
         if (dt < bestDt) { bestDt = dt; best = n; }
     }
 
-    if (!best || bestDt > HIT_WINDOW_GOOD + 0.05) {
-        showJudgement("miss");
+    // If the closest note is too far away (or none exists at all) → STRAY hit:
+    // just a lane flash, no judgement, no combo penalty. Lets you drum freely
+    // without being penalized for "extra" hits.
+    if (!best || bestDt > STRAY_WINDOW) {
         return;
     }
 
-    best.judged = true;
-    best.hit = true;
-
     if (bestDt <= HIT_WINDOW_PERFECT) {
+        best.judged = true;
+        best.hit = true;
         score += 100; perfectCount++; combo++; audio.hit(true);
         showJudgement("perfect");
     } else if (bestDt <= HIT_WINDOW_GOOD) {
+        best.judged = true;
+        best.hit = true;
         score += 50; goodCount++; combo++; audio.hit(false);
         showJudgement("good");
     } else {
+        // Within STRAY_WINDOW but outside GOOD → real miss (close call)
+        best.judged = true;
+        best.hit = false;
         registerMiss();
     }
 
