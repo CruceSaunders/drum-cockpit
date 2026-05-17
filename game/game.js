@@ -7,16 +7,21 @@
  * that the note hits the bottom of its lane at exactly the right moment.
  *
  * Inputs:
- *   Drums 1-4 = lane hits in-game
- *   Drum 5    = menu navigation (single tap = cycle, double tap = select)
+ *   Drums 1-5 = lane hits in-game (5 lanes total)
+ *   Drum 5    = on song-select & result screens: menu navigation
+ *               (single tap = cycle, double tap = select / back)
  *   Drum 6    = mode switch back to coding (handled in drummer.py, not here)
+ *
+ * The screen-state check in the keydown listener routes drum 5 differently
+ * depending on what's visible: nav on menus, lane-hit during gameplay.
  * ============================================================================
  */
 
 // ---------- Tunable constants ------------------------------------------------
 
 const TRAVEL_TIME    = 1.5;   // seconds for a note to fall top -> bottom
-const LANE_COUNT     = 4;
+const LANE_COUNT     = 5;
+const LANE_WIDTH     = 110;   // must match .lane-label width in style.css
 const HIT_ZONE_HEIGHT = 80;
 const HIT_WINDOW_GOOD    = 0.12;  // ± seconds, "good"
 const HIT_WINDOW_PERFECT = 0.06;  // ± seconds, "perfect"
@@ -79,14 +84,14 @@ function setupCanvas() {
 }
 
 function laneX(lane) {
-    const laneW = 110;
+    const laneW = LANE_WIDTH;
     const groupW = laneW * LANE_COUNT;
     const groupX = (canvas.width - groupW) / 2;
     return groupX + (lane - 1) * laneW + laneW / 2;
 }
 
 function laneRect() {
-    const laneW = 110;
+    const laneW = LANE_WIDTH;
     const groupW = laneW * LANE_COUNT;
     return { x: (canvas.width - groupW) / 2, w: groupW, laneW };
 }

@@ -250,8 +250,8 @@ def focus_app(app_name: str):
 
 
 def focus_game_window():
-    """Find Chrome window/tab with our game URL and focus it; if not found,
-    open the game URL in Chrome."""
+    """Find Chrome window/tab with our game URL, focus it, AND click into
+    the page content area so the URL bar doesn't keep keyboard focus."""
     app = CONFIG["mode_focus_app"].get("game", "Google Chrome")
     match = CONFIG["game_url_match"]
     url = CONFIG["game_url"]
@@ -278,6 +278,23 @@ def focus_game_window():
         if not found then
             open location "{url}"
         end if
+    end tell
+
+    delay 0.2
+
+    -- Click into the page content so keystrokes reach the page, not the URL bar.
+    -- Position: horizontal center, ~130px below the top of the window
+    -- (past Chrome's title/tab/toolbar, into the page body).
+    tell application "System Events"
+        tell process "{app}"
+            try
+                set winPos to position of front window
+                set winSize to size of front window
+                set cx to (item 1 of winPos) + (item 1 of winSize) / 2
+                set cy to (item 2 of winPos) + 130
+                click at {{cx, cy}}
+            end try
+        end tell
     end tell
     '''
     subprocess.run(["osascript", "-e", script], capture_output=True)
