@@ -56,6 +56,12 @@ html, body {
     border-color: #6a5cff;
     background: rgba(106, 92, 255, 0.12);
 }
+.song-btn.selected {
+    border-color: #5cdaff;
+    background: rgba(92, 218, 255, 0.18);
+    box-shadow: 0 0 32px rgba(92, 218, 255, 0.45);
+    transform: translateY(-4px);
+}
 .song-name {
     font-size: 1.4rem;
     font-weight: 700;
@@ -181,3 +187,27 @@ html, body {
     cursor: pointer;
 }
 #play-again:hover { opacity: 0.9; }
+
+/* ============ Last-drum debug indicator ============ */
+
+#key-indicator {
+    position: fixed;
+    bottom: 8px;
+    right: 12px;
+    font-size: 0.75rem;
+    color: #5a5a70;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 4px 10px;
+    border-radius: 10px;
+    z-index: 100;
+    pointer-events: none;
+}
+#last-key {
+    color: #5cdaff;
+    font-weight: 700;
+    transition: color 200ms;
+}
+#last-key.flash {
+    color: #ff5ea0;
+}

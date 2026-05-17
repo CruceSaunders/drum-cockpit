@@ -5,12 +5,12 @@
     <title>Drum Cockpit — Rhythm Rush</title>
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body tabindex="-1">
     <div id="song-select" class="screen active">
         <h1>🥁 Rhythm Rush</h1>
         <p class="subtitle">drum the falling notes in time</p>
         <div class="songs">
-            <button class="song-btn" data-song="0">
+            <button class="song-btn selected" data-song="0">
                 <div class="song-name">Stack Trace</div>
                 <div class="song-meta">80 BPM · Easy</div>
             </button>
@@ -23,7 +23,10 @@
                 <div class="song-meta">160 BPM · Hard</div>
             </button>
         </div>
-        <p class="hint">Press a drum 1-5 to hit a falling note. Drum 6 returns to coding.</p>
+        <p class="hint">
+            Drum <b>5</b>: tap to cycle · tap twice fast to start &nbsp;·&nbsp;
+            Drum <b>6</b>: return to coding
+        </p>
     </div>
 
     <div id="game-screen" class="screen">
@@ -47,7 +50,6 @@
             <div class="lane-label">2</div>
             <div class="lane-label">3</div>
             <div class="lane-label">4</div>
-            <div class="lane-label">5</div>
         </div>
         <div id="judgement"></div>
     </div>
@@ -62,7 +64,11 @@
         </div>
         <p id="result-quip" class="quip"></p>
         <button id="play-again">Play again</button>
+        <p class="hint">Drum <b>5</b> to return to song select &nbsp;·&nbsp; Drum <b>6</b> for coding</p>
     </div>
+
+    <!-- Always-visible debug strip so you can SEE drums reaching the page -->
+    <div id="key-indicator">Last drum: <span id="last-key">—</span></div>
 
     <script src="songs.js"></script>
     <script src="audio.js"></script>

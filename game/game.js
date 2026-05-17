@@ -5,17 +5,23 @@
  * note, we know exactly when it should be hit (song-time). The note's Y
  * position on screen is computed from that and the constant TRAVEL_TIME so
  * that the note hits the bottom of its lane at exactly the right moment.
+ *
+ * Inputs:
+ *   Drums 1-4 = lane hits in-game
+ *   Drum 5    = menu navigation (single tap = cycle, double tap = select)
+ *   Drum 6    = mode switch back to coding (handled in drummer.py, not here)
  * ============================================================================
  */
 
 // ---------- Tunable constants ------------------------------------------------
 
 const TRAVEL_TIME    = 1.5;   // seconds for a note to fall top -> bottom
-const LANE_COUNT     = 5;
-const HIT_ZONE_HEIGHT = 80;   // px; bottom area where notes are hittable
+const LANE_COUNT     = 4;
+const HIT_ZONE_HEIGHT = 80;
 const HIT_WINDOW_GOOD    = 0.12;  // ± seconds, "good"
 const HIT_WINDOW_PERFECT = 0.06;  // ± seconds, "perfect"
 const MISS_WINDOW        = 0.15;  // seconds late after which the note auto-misses
+const DOUBLE_TAP_WINDOW  = 400;   // ms — double-tap drum 5 to select song
 
 const QUIPS = {
     great: [
@@ -40,7 +46,7 @@ const QUIPS = {
 const audio = new AudioEngine();
 let canvas, ctx;
 let song = null;
-let notes = [];           // active notes: {beat, lane, hitTime, hit, judged}
+let notes = [];
 let songDuration = 0;
 let running = false;
 let lastFrame = 0;
@@ -52,7 +58,11 @@ let perfectCount = 0;
 let goodCount = 0;
 let missCount = 0;
 
-let laneFlash = [0, 0, 0, 0, 0]; // ms timer per lane for visual flash
+let laneFlash = new Array(LANE_COUNT).fill(0);
+
+// Song-select navigation state
+let selectedSongIndex = 0;
+let lastSelectTapTime = 0;
 
 // ---------- Setup ------------------------------------------------------------
 
@@ -69,15 +79,14 @@ function setupCanvas() {
 }
 
 function laneX(lane) {
-    // Lane 1..5 -> centered group of 5 columns, 90px wide each, centered horizontally
-    const laneW = 90;
+    const laneW = 110;
     const groupW = laneW * LANE_COUNT;
     const groupX = (canvas.width - groupW) / 2;
     return groupX + (lane - 1) * laneW + laneW / 2;
 }
 
 function laneRect() {
-    const laneW = 90;
+    const laneW = 110;
     const groupW = laneW * LANE_COUNT;
     return { x: (canvas.width - groupW) / 2, w: groupW, laneW };
 }
@@ -87,13 +96,15 @@ function laneRect() {
 function loadSong(songIndex) {
     song = SONGS[songIndex];
     const beatSec = 60 / song.bpm;
-    notes = song.chart.map(entry => ({
-        beat: entry.beat,
-        lane: entry.lane,
-        hitTime: entry.beat * beatSec,
-        hit: false,
-        judged: false,
-    }));
+    notes = song.chart
+        .filter(entry => entry.lane >= 1 && entry.lane <= LANE_COUNT)
+        .map(entry => ({
+            beat: entry.beat,
+            lane: entry.lane,
+            hitTime: entry.beat * beatSec,
+            hit: false,
+            judged: false,
+        }));
 }
 
 // ---------- Game loop --------------------------------------------------------
@@ -106,7 +117,7 @@ function startGame(songIndex) {
     perfectCount = 0;
     goodCount = 0;
     missCount = 0;
-    laneFlash = [0, 0, 0, 0, 0];
+    laneFlash = new Array(LANE_COUNT).fill(0);
 
     document.getElementById("score").textContent = "0";
     document.getElementById("combo").textContent = "0x";
@@ -158,7 +169,7 @@ function render() {
     const W = canvas.width;
     const H = canvas.height;
     const { x: groupX, w: groupW, laneW } = laneRect();
-    const hitZoneY = H - HIT_ZONE_HEIGHT - 60; // 60px gutter for lane labels
+    const hitZoneY = H - HIT_ZONE_HEIGHT - 60;
 
     // BG
     ctx.fillStyle = "#0a0a14";
@@ -170,7 +181,6 @@ function render() {
         ctx.fillStyle = (i % 2 === 0) ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.04)";
         ctx.fillRect(lx, 0, laneW, H);
 
-        // Lane flash
         if (laneFlash[i] > 0) {
             ctx.fillStyle = `rgba(106, 92, 255, ${0.25 * (laneFlash[i] / 150)})`;
             ctx.fillRect(lx, 0, laneW, H);
@@ -185,7 +195,6 @@ function render() {
     ctx.lineTo(groupX + groupW, hitZoneY);
     ctx.stroke();
 
-    // Hit zone glow
     const grad = ctx.createLinearGradient(0, hitZoneY, 0, hitZoneY + HIT_ZONE_HEIGHT);
     grad.addColorStop(0, "rgba(106, 92, 255, 0.30)");
     grad.addColorStop(1, "rgba(106, 92, 255, 0)");
@@ -194,17 +203,16 @@ function render() {
 
     // Notes
     for (const n of notes) {
-        if (n.judged && n.hit) continue;  // hit & gone
+        if (n.judged && n.hit) continue;
         const dtToHit = n.hitTime - t;
-        if (dtToHit > TRAVEL_TIME) continue;       // not spawned yet
-        if (dtToHit < -MISS_WINDOW * 2) continue;  // way past, skip render
+        if (dtToHit > TRAVEL_TIME) continue;
+        if (dtToHit < -MISS_WINDOW * 2) continue;
 
-        // Y: maps [TRAVEL_TIME .. 0] -> [0 .. hitZoneY]
         const progress = 1 - (dtToHit / TRAVEL_TIME);
         const y = progress * hitZoneY;
         const cx = laneX(n.lane);
 
-        const noteR = 32;
+        const noteR = 36;
 
         // Glow
         ctx.fillStyle = `rgba(106, 92, 255, ${Math.min(0.45, progress * 0.5)})`;
@@ -212,7 +220,6 @@ function render() {
         ctx.arc(cx, y, noteR + 10, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core
         const noteGrad = ctx.createLinearGradient(cx - noteR, y, cx + noteR, y);
         noteGrad.addColorStop(0, "#5cdaff");
         noteGrad.addColorStop(1, "#6a5cff");
@@ -221,23 +228,21 @@ function render() {
         ctx.arc(cx, y, noteR, 0, Math.PI * 2);
         ctx.fill();
 
-        // Lane number on note
         ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.font = "bold 18px -apple-system, sans-serif";
+        ctx.font = "bold 20px -apple-system, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(n.lane, cx, y);
     }
 }
 
-// ---------- Input handling ---------------------------------------------------
+// ---------- In-game hit handling ---------------------------------------------
 
 function handleHit(lane) {
     laneFlash[lane - 1] = 150;
 
     const t = audio.now();
 
-    // Find the closest unjudged note in this lane
     let best = null;
     let bestDt = Infinity;
     for (const n of notes) {
@@ -248,8 +253,6 @@ function handleHit(lane) {
     }
 
     if (!best || bestDt > HIT_WINDOW_GOOD + 0.05) {
-        // Too far from any note → counts as a "stray hit" — we don't penalize
-        // since the missed note will auto-miss on its own.
         showJudgement("miss");
         return;
     }
@@ -293,17 +296,40 @@ function showJudgement(kind) {
     }, 350);
 }
 
-window.addEventListener("keydown", (e) => {
-    if (!running) return;
-    const n = parseInt(e.key, 10);
-    if (n >= 1 && n <= 5) handleHit(n);
-});
+// ---------- Song-select navigation (drum 5) ----------------------------------
+
+function highlightSelectedSong() {
+    document.querySelectorAll(".song-btn").forEach((btn, i) => {
+        btn.classList.toggle("selected", i === selectedSongIndex);
+    });
+}
+
+function handleSongSelectKey5() {
+    const now = performance.now();
+    if (now - lastSelectTapTime < DOUBLE_TAP_WINDOW) {
+        // Second tap of double-tap → select current
+        lastSelectTapTime = 0;
+        startGame(selectedSongIndex);
+    } else {
+        // Single tap → cycle to next song
+        selectedSongIndex = (selectedSongIndex + 1) % SONGS.length;
+        highlightSelectedSong();
+        lastSelectTapTime = now;
+    }
+}
+
+function handleResultScreenKey5() {
+    // Just go back to song select on result screen
+    show("song-select");
+}
 
 // ---------- Screen switching -------------------------------------------------
 
 function show(screenId) {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById(screenId).classList.add("active");
+    // Re-grab focus when changing screens so drums reach the page
+    try { document.body.focus(); } catch (e) {}
 }
 
 function endGame() {
@@ -330,11 +356,46 @@ function endGame() {
     show("result-screen");
 }
 
-// ---------- Wire up song select / play-again ---------------------------------
+// ---------- Global key listener ----------------------------------------------
+
+function flashLastKey(keyStr) {
+    const el = document.getElementById("last-key");
+    if (!el) return;
+    el.textContent = keyStr;
+    el.classList.remove("flash");
+    void el.offsetWidth; // restart CSS animation
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 200);
+}
+
+window.addEventListener("keydown", (e) => {
+    // Always show the indicator so you can verify drums are reaching the page
+    if (e.key >= "1" && e.key <= "9") flashLastKey(e.key);
+
+    if (document.getElementById("song-select").classList.contains("active")) {
+        if (e.key === "5") {
+            handleSongSelectKey5();
+            return;
+        }
+    } else if (document.getElementById("result-screen").classList.contains("active")) {
+        if (e.key === "5") {
+            handleResultScreenKey5();
+            return;
+        }
+    } else if (running) {
+        // In-game: drums 1-4 hit lanes 1-4
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= LANE_COUNT) handleHit(n);
+    }
+});
+
+// ---------- Wire up mouse fallbacks for song select and play-again -----------
 
 document.querySelectorAll(".song-btn").forEach(btn => {
     btn.addEventListener("click", () => {
         const songIdx = parseInt(btn.dataset.song, 10);
+        selectedSongIndex = songIdx;
+        highlightSelectedSong();
         startGame(songIdx);
     });
 });
@@ -345,3 +406,7 @@ document.getElementById("play-again").addEventListener("click", () => {
 // ---------- Boot -------------------------------------------------------------
 
 setupCanvas();
+highlightSelectedSong();
+// Try to grab keyboard focus right away
+window.addEventListener("load", () => { try { document.body.focus(); } catch (e) {} });
+try { document.body.focus(); } catch (e) {}

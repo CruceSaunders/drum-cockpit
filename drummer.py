@@ -79,7 +79,9 @@ CONFIG = {
     # ---- Cross-pad debounce (ms) ----
     # Same pad fired again within this window is treated as a bounce and dropped.
     # Covers stick bounces AND the coupled pair (GPIO 0+1 → both report PAD 6).
-    "pad_debounce_ms": 300,
+    # 80ms is enough for stick bounce + coupled pair (~50ms apart) while still
+    # allowing fast rhythm-game play (>12 hits/sec on the same pad).
+    "pad_debounce_ms": 80,
 
     # ---- Which pad cycles modes? Must be in active_pads. ----
     "mode_switch_pad": "pad_6",
