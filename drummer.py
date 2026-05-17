@@ -74,24 +74,15 @@ CONFIG = {
     "mode_switch_pad": "pad_7",
 
     # ---- Pad → action mapping per mode ----
-    # Action name must exist in ACTION_HANDLERS below.
-    # mode_switch_pad is handled specially; do not list it here.
+    # INTENTIONALLY EMPTY for now — controls get added in a later step.
+    # pad_7 (mode switch) is handled separately, not in this dict.
+    # Hitting any other pad will just log "no action mapped" and do nothing.
     "actions": {
         "coding": {
-            "pad_1": "wispr_toggle",      # start/stop Wispr dictation
-            "pad_2": "enter",             # send Enter
-            "pad_3": "tmux_new_tab",      # iTerm Cmd+T (new tab)
-            "pad_5": "tmux_next_tab",     # iTerm Cmd+] (next tab)
-            "pad_6": "cancel",            # Ctrl+C
-            # pad_7 = mode switch
+            # add bindings here when we wire up coding controls
         },
         "game": {
-            "pad_1": "game_input_1",
-            "pad_2": "game_input_2",
-            "pad_3": "game_input_3",
-            "pad_5": "game_input_4",
-            "pad_6": "game_input_5",
-            # pad_7 = mode switch
+            # add bindings here when we wire up game controls
         },
     },
 
