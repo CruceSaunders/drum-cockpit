@@ -78,12 +78,11 @@ CONFIG = {
 
     # ---- Cross-pad debounce (ms) ----
     # Same pad fired again within this window is treated as a bounce and dropped.
-    # Per-pad: pad_6 is a coupled hardware pair that fires twice with variable
-    # spacing (can lag if serial reader is busy), so it needs a wider window.
-    # Pads 1-4 are used for fast rhythm play, so they get a tight window.
+    # Firmware-side cross-pin debounce already deduplicates the pad 6 coupled
+    # pair (GPIOs 0+1 → both emit PAD 6 but firmware suppresses the second).
+    # Python-side debounce is just a safety net + handles stick bounce for all pads.
     "pad_debounce_ms": {
         "default": 80,    # covers stick bounce, allows fast rhythm play
-        "pad_6": 350,     # coupled pair — wider window so both halves get caught
     },
 
     # ---- Which pad cycles modes? Must be in active_pads. ----

@@ -30,6 +30,14 @@ const unsigned long DEBOUNCE_MS = 30;
 const unsigned long LED_FLASH_MS = 30;
 const int LED_PIN = 8;  // onboard LED, active LOW
 
+// Cross-pin debounce: when two different GPIOs map to the same physical pad
+// number (coupled hardware pair: GPIOs 0+1 both fire PAD 6), only emit the
+// first event. The second is suppressed inside the firmware, before reaching
+// the Python side, so it can't slip past any host-side debounce timing.
+const unsigned long CROSS_PIN_DEBOUNCE_MS = 120;
+const int MAX_PAD_NUM = 6;
+unsigned long lastPadEmitMs[MAX_PAD_NUM + 1] = {0};  // index by physical pad number 1..6
+
 int lastState[PAD_COUNT];
 unsigned long lastChange[PAD_COUNT];
 
@@ -87,9 +95,20 @@ void loop() {
       lastChange[i] = now;
       lastState[i] = state;
       if (state == LOW) {
-        // pad pressed
+        int padNum = PAD_NUMBERS[i];
+
+        // Cross-pin debounce for coupled pads (multiple GPIOs → same pad #).
+        // Suppress events that arrive within CROSS_PIN_DEBOUNCE_MS of the
+        // previous emission for the same padNum.
+        if (padNum >= 1 && padNum <= MAX_PAD_NUM) {
+          if (now - lastPadEmitMs[padNum] < CROSS_PIN_DEBOUNCE_MS) {
+            continue;  // suppressed duplicate (from coupled pair)
+          }
+          lastPadEmitMs[padNum] = now;
+        }
+
         Serial.print("PAD ");
-        Serial.println(PAD_NUMBERS[i]);
+        Serial.println(padNum);
         flashLed();
       }
     }
